@@ -5,6 +5,14 @@ void *_dynarr_alloc_(size_t bytes, int dynamic, struct _dynarr_allocator_ *alloc
 void *_dynarr_realloc_(void *ptr, size_t bytes, struct _dynarr_allocator_ *allocator);
 void _dynarr_dealloc_(void *ptr, int dynamic, struct _dynarr_allocator_ *allocator);
 
+#define DYNARR_DETERMINATE_GROW(count) (count == 0 ? DYNARR_DEFAULT_GROW_SIZE : count * 2)
+
+size_t dynarr_padding(size_t item_size);
+#define DYNARR_SIZE(padding, count, dynarr) ((dynarr->size + padding) * count)
+#define DYNARR_POSITION(position, dynarr) (dynarr->items + DYNARR_SIZE(dynarr_padding(dynarr->size), position, dynarr))
+
+int dynarr_resize(size_t padding, size_t new_count, struct _dynarr_ *dynarr);
+
 // private implementation
 void *_dynarr_alloc_(size_t bytes, int dynamic, struct _dynarr_allocator_ *allocator)
 {
@@ -25,6 +33,12 @@ void _dynarr_dealloc_(void *ptr, int dynamic, struct _dynarr_allocator_ *allocat
         allocator->dynarr_dealloc(ptr, dynamic);
     else
         free(ptr);
+}
+
+size_t dynarr_padding(size_t item_size)
+{
+    size_t modulo = item_size & (DYNARR_ALIGNMENT - 1);
+    return DYNARR_ALIGNMENT - modulo;
 }
 
 // public implementation
@@ -57,12 +71,6 @@ void dynarr_destroy(struct _dynarr_ *dynarr)
     dynarr->allocator = NULL;
 
     _dynarr_dealloc_(dynarr, 0, allocator);
-}
-
-size_t dynarr_padding(size_t item_size)
-{
-    size_t modulo = item_size & (DYNARR_ALIGNMENT - 1);
-    return DYNARR_ALIGNMENT - modulo;
 }
 
 int dynarr_resize(size_t padding, size_t new_count, struct _dynarr_ *dynarr)

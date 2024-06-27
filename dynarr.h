@@ -47,13 +47,6 @@ void dynarr_destroy(struct _dynarr_ *dynarr);
 
 #define DYNARR_LEN(dynarr) (dynarr->used)
 #define DYNARR_AVAILABLE(dynarr) (dynarr->count - dynarr->used)
-#define DYNARR_DETERMINATE_GROW(count) (count == 0 ? DYNARR_DEFAULT_GROW_SIZE : count * 2)
-
-size_t dynarr_padding(size_t item_size);
-#define DYNARR_SIZE(padding, count, dynarr) ((dynarr->size + padding) * count)
-#define DYNARR_POSITION(position, dynarr) (dynarr->items + DYNARR_SIZE(dynarr_padding(dynarr->size), position, dynarr))
-
-int dynarr_resize(size_t padding, size_t new_count, struct _dynarr_ *dynarr);
 
 void *dynarr_get(size_t index, struct _dynarr_ *dynarr);
 void dynarr_set(void *item, size_t index, struct _dynarr_ *dynarr);
