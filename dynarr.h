@@ -59,6 +59,7 @@ void *dynarr_get(size_t index, struct _dynarr_ *dynarr);
 void dynarr_set(void *item, size_t index, struct _dynarr_ *dynarr);
 int dynarr_insert(void *item, struct _dynarr_ *dynarr);
 void dynarr_remove_index(size_t index, struct _dynarr_ *dynarr);
+void dynarr_remove_all(struct _dynarr_ *dynarr);
 
 // DynArrPtr
 struct _dynarr_ptr_ *dynarr_ptr_create(struct _dynarr_allocator_ *allocator);

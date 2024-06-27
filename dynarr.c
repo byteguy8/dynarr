@@ -1,5 +1,32 @@
 #include "dynarr.h"
 
+// private interface
+void *_dynarr_alloc_(size_t bytes, int dynamic, struct _dynarr_allocator_ *allocator);
+void *_dynarr_realloc_(void *ptr, size_t bytes, struct _dynarr_allocator_ *allocator);
+void _dynarr_dealloc_(void *ptr, int dynamic, struct _dynarr_allocator_ *allocator);
+
+// private implementation
+void *_dynarr_alloc_(size_t bytes, int dynamic, struct _dynarr_allocator_ *allocator)
+{
+    return allocator ? allocator->dynarr_alloc(bytes, dynamic) : malloc(bytes);
+}
+
+void *_dynarr_realloc_(void *ptr, size_t bytes, struct _dynarr_allocator_ *allocator)
+{
+    return allocator ? allocator->dynarr_realloc(ptr, bytes) : realloc(ptr, bytes);
+}
+
+void _dynarr_dealloc_(void *ptr, int dynamic, struct _dynarr_allocator_ *allocator)
+{
+    if (!ptr)
+        return;
+
+    if (allocator)
+        allocator->dynarr_dealloc(ptr, dynamic);
+    else
+        free(ptr);
+}
+
 // public implementation
 struct _dynarr_ *dynarr_create(size_t item_size, struct _dynarr_allocator_ *allocator)
 {
@@ -45,12 +72,7 @@ size_t dynarr_padding(size_t item_size)
 
 int dynarr_resize(size_t padding, size_t new_count, struct _dynarr_ *dynarr)
 {
-    void *items = NULL;
-
-    if (dynarr->allocator)
-        items = dynarr->allocator->dynarr_realloc(dynarr->items, DYNARR_SIZE(padding, new_count, dynarr));
-    else
-        items = realloc(dynarr->items, DYNARR_SIZE(padding, new_count, dynarr));
+    void *items = _dynarr_realloc_(dynarr->items, DYNARR_SIZE(padding, new_count, dynarr), dynarr->allocator);
 
     if (!items)
         return 1;
@@ -104,6 +126,13 @@ void dynarr_remove_index(size_t index, struct _dynarr_ *dynarr)
     }
 
     dynarr->used--;
+}
+
+void dynarr_remove_all(struct _dynarr_ *dynarr)
+{
+    size_t padding = dynarr_padding(dynarr->size);
+    dynarr_resize(padding, DYNARR_DEFAULT_GROW_SIZE, dynarr);
+    dynarr->used = 0;
 }
 
 struct _dynarr_ptr_ *dynarr_ptr_create(struct _dynarr_allocator_ *allocator)
