@@ -31,7 +31,7 @@ void _dynarr_dealloc_(void *ptr, int dynamic, struct _dynarr_allocator_ *allocat
 struct _dynarr_ *dynarr_create(size_t item_size, struct _dynarr_allocator_ *allocator)
 {
     size_t bytes = sizeof(struct _dynarr_);
-    struct _dynarr_ *vector = (struct _dynarr_ *)(allocator == NULL ? malloc(bytes) : allocator->dynarr_alloc(bytes, 0));
+    struct _dynarr_ *vector = (struct _dynarr_ *)_dynarr_alloc_(bytes, 0, allocator);
 
     vector->used = 0;
     vector->count = 0;
@@ -47,21 +47,16 @@ void dynarr_destroy(struct _dynarr_ *dynarr)
     if (!dynarr)
         return;
 
-    if (dynarr->allocator)
-        dynarr->allocator->dynarr_dealloc(dynarr->items, 1);
-    else
-        free(dynarr->items);
+    struct _dynarr_allocator_ *allocator = dynarr->allocator;
+
+    _dynarr_dealloc_(dynarr->items, 1, allocator);
 
     dynarr->used = 0;
     dynarr->count = 0;
     dynarr->items = NULL;
+    dynarr->allocator = NULL;
 
-    if (dynarr->allocator)
-        dynarr->allocator->dynarr_dealloc(dynarr, 0);
-    else
-        free(dynarr);
-
-    dynarr = NULL;
+    _dynarr_dealloc_(dynarr, 0, allocator);
 }
 
 size_t dynarr_padding(size_t item_size)
@@ -96,10 +91,18 @@ void dynarr_set(void *item, size_t index, struct _dynarr_ *dynarr)
 
 int dynarr_insert(void *item, struct _dynarr_ *dynarr)
 {
-    if (dynarr->used >= dynarr->count && dynarr_resize(dynarr_padding(dynarr->size), DYNARR_DETERMINATE_GROW(dynarr->count), dynarr))
-        return 1;
+    if (dynarr->used >= dynarr->count)
+    {
+        size_t padding = dynarr_padding(dynarr->size);
+        size_t count = DYNARR_DETERMINATE_GROW(dynarr->count);
 
-    memcpy(DYNARR_POSITION(dynarr->used++, dynarr), item, dynarr->size);
+        if (dynarr_resize(padding, count, dynarr))
+            return 1;
+    }
+
+    void *slot = DYNARR_POSITION(dynarr->used++, dynarr);
+
+    memcpy(slot, item, dynarr->size);
 
     return 0;
 }
