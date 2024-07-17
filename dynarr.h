@@ -17,9 +17,9 @@
 
 typedef struct _dynarr_allocator_
 {
-    void *(*dynarr_alloc)(size_t size, int dynamic);
-    void *(*dynarr_realloc)(void *ptr, size_t size);
-    void (*dynarr_dealloc)(void *ptr, int dynamic);
+    void *(*alloc)(size_t size);
+    void *(*realloc)(void *ptr, size_t size);
+    void (*dealloc)(void *ptr);
 } DynArrAllocator;
 
 typedef struct _dynarr_
