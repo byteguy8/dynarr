@@ -43,7 +43,7 @@ typedef struct dynarr_ptr
 // interface
 
 // DynArr
-struct dynarr *dynarr_create(size_t item_size, struct _dynarr_allocator_ *allocator);
+struct dynarr *dynarr_create(size_t item_size, struct dynarr_allocator *allocator);
 void dynarr_destroy(struct dynarr *dynarr);
 
 #define DYNARR_LEN(dynarr) (dynarr->used)
@@ -56,7 +56,7 @@ void dynarr_remove_index(size_t index, struct dynarr *dynarr);
 void dynarr_remove_all(struct dynarr *dynarr);
 
 // DynArrPtr
-struct dynarr_ptr *dynarr_ptr_create(struct _dynarr_allocator_ *allocator);
+struct dynarr_ptr *dynarr_ptr_create(struct dynarr_allocator *allocator);
 void dynarr_ptr_destroy(struct dynarr_ptr *dynarr);
 
 #define DYNARR_PTR_SIZE(count, dynarr) (sizeof(void *) * (count))
