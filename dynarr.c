@@ -21,9 +21,9 @@ void *_alloc_(size_t size, struct _dynarr_allocator_ *allocator)
     return allocator ? allocator->alloc(size, allocator->ctx) : malloc(size);
 }
 
-void *_realloc_(void *ptr, size_t old_size, size_t new_size, struct _dynarr_allocator_ *allocator)
+void *_realloc_(void *ptr, size_t new_size, size_t old_size, struct _dynarr_allocator_ *allocator)
 {
-    return allocator ? allocator->realloc(ptr, old_size, new_size, allocator->ctx) : realloc(ptr, new_size);
+    return allocator ? allocator->realloc(ptr, new_size, old_size, allocator->ctx) : realloc(ptr, new_size);
 }
 
 void _dealloc_(void *ptr, size_t size, struct _dynarr_allocator_ *allocator)
@@ -80,7 +80,7 @@ int dynarr_resize(size_t padding, size_t new_count, struct _dynarr_ *dynarr)
 {
     size_t old_size = DYNARR_ITEMS_SIZE(dynarr);
     size_t new_size = DYNARR_SIZE(padding, new_count, dynarr);
-    void *items = _realloc_(dynarr->items, old_size, new_size, dynarr->allocator);
+    void *items = _realloc_(dynarr->items, new_size, old_size, dynarr->allocator);
 
     if (!items)
         return 1;
@@ -185,7 +185,7 @@ int dynarr_ptr_resize(size_t new_count, struct _dynarr_ptr_ *dynarr)
 {
     size_t old_size = DYNARR_PTR_ITEMS_SIZE(dynarr);
     size_t new_size = sizeof(void *) * new_count;
-    void **items = _realloc_(dynarr->items, old_size, new_size, dynarr->allocator);
+    void **items = _realloc_(dynarr->items, new_size, old_size, dynarr->allocator);
 
     if (!items)
         return 1;
