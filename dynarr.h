@@ -15,30 +15,27 @@
 #define DYNARR_DEFAULT_GROW_SIZE 8
 #endif
 
-typedef struct dynarr_allocator
-{
+typedef struct dynarr_allocator{
     void *(*alloc)(size_t size, void *ctx);
     void *(*realloc)(void *ptr, size_t new_size, size_t old_size, void *ctx);
     void (*dealloc)(void *ptr, size_t size, void *ctx);
     void *ctx;
-} DynArrAllocator;
+}DynArrAllocator;
 
-typedef struct dynarr
-{
+typedef struct dynarr{
     size_t count;
     size_t used;
     size_t size;
     void *items;
     struct dynarr_allocator *allocator;
-} DynArr;
+}DynArr;
 
-typedef struct dynarr_ptr
-{
+typedef struct dynarr_ptr{
     size_t used;
     size_t count;
     void **items;
     struct dynarr_allocator *allocator;
-} DynArrPtr;
+}DynArrPtr;
 
 // Public Interface
 //> DynArr
