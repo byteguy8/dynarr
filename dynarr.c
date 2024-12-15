@@ -1,19 +1,21 @@
 #include "dynarr.h"
 #include <assert.h>
 
+#define DYNARR_SIZE sizeof(struct dynarr)
+
 // private interface
 static void *lzalloc(size_t size, struct dynarr_allocator *allocator);
 static void *lzrealloc(void *ptr, size_t old_size, size_t new_size, struct dynarr_allocator *allocator);
 static void lzdealloc(void *ptr, size_t size, struct dynarr_allocator *allocator);
 
-static size_t dynarr_padding_size(size_t item_size);
+static size_t padding_size(size_t item_size);
 static int dynarr_resize(size_t new_count, struct dynarr *dynarr);
 static void dynarr_move_items(size_t from, size_t to, size_t count, struct dynarr *dynarr);
 
 #define DYNARR_DETERMINATE_GROW(count) (count == 0 ? DYNARR_DEFAULT_GROW_SIZE : count * 2)
 #define DYNARR_LEN(dynarr)(dynarr->used)
 #define DYNARR_FREE(dynarr)(dynarr->count - DYNARR_LEN(dynarr))
-#define DYNARR_ITEM_SIZE(dynarr)(dynarr_padding_size(dynarr->size) + dynarr->size)
+#define DYNARR_ITEM_SIZE(dynarr)(padding_size(dynarr->size) + dynarr->size)
 #define DYNARR_CALC_SIZE(count, dynarr) (DYNARR_ITEM_SIZE(dynarr) * count)
 #define DYNARR_ITEMS_SIZE(dynarr) (DYNARR_CALC_SIZE(dynarr->count, dynarr))
 #define DYNARR_POSITION(position, dynarr) (((char *)dynarr->items) + (position * DYNARR_ITEM_SIZE(dynarr)))
@@ -39,9 +41,9 @@ void lzdealloc(void *ptr, size_t size, struct dynarr_allocator *allocator){
         free(ptr);
 }
 
-size_t dynarr_padding_size(size_t item_size){
+size_t padding_size(size_t item_size){
     size_t modulo = item_size & (DYNARR_ALIGNMENT - 1);
-    return DYNARR_ALIGNMENT - modulo;
+    return modulo == 0 ? 0 : DYNARR_ALIGNMENT - modulo;
 }
 
 int dynarr_resize(size_t new_count, struct dynarr *dynarr){
@@ -67,33 +69,27 @@ void dynarr_move_items(size_t from, size_t to, size_t count, struct dynarr *dyna
 
 // public implementation
 struct dynarr *dynarr_create(size_t item_size, struct dynarr_allocator *allocator){
-    size_t bytes = sizeof(struct dynarr);
-    struct dynarr *vector = (struct dynarr *)lzalloc(bytes, allocator);
+    struct dynarr *dynarr = (struct dynarr *)lzalloc(DYNARR_SIZE, allocator);
+    if(!dynarr) return NULL;
 
-    vector->used = 0;
-    vector->count = 0;
-    vector->size = item_size;
-    vector->items = NULL;
-    vector->allocator = allocator;
+    dynarr->used = 0;
+    dynarr->count = 0;
+    dynarr->size = item_size;
+    dynarr->items = NULL;
+    dynarr->allocator = allocator;
 
-    return vector;
+    return dynarr;
 }
 
 void dynarr_destroy(struct dynarr *dynarr){
-    if (!dynarr)
-        return;
+    if (!dynarr) return;
 
     struct dynarr_allocator *allocator = dynarr->allocator;
     size_t size = DYNARR_ITEMS_SIZE(dynarr);
 
     lzdealloc(dynarr->items, size, allocator);
-
-    dynarr->used = 0;
-    dynarr->count = 0;
-    dynarr->items = NULL;
-    dynarr->allocator = NULL;
-
-    lzdealloc(dynarr, sizeof(struct dynarr), allocator);
+    memset(dynarr, 0, DYNARR_SIZE);
+    lzdealloc(dynarr, DYNARR_SIZE, allocator);
 }
 
 void *dynarr_get(size_t index, struct dynarr *dynarr){
