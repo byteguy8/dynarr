@@ -16,17 +16,18 @@
 #endif
 
 typedef struct dynarr_allocator{
+    void *ctx;
     void *(*alloc)(size_t size, void *ctx);
     void *(*realloc)(void *ptr, size_t new_size, size_t old_size, void *ctx);
     void (*dealloc)(void *ptr, size_t size, void *ctx);
-    void *ctx;
 }DynArrAllocator;
 
 typedef struct dynarr{
     size_t count;
     size_t used;
     size_t size;
-    void *items;
+    size_t padding;
+    char *items;
     struct dynarr_allocator *allocator;
 }DynArr;
 
@@ -42,16 +43,17 @@ typedef struct dynarr_ptr{
 struct dynarr *dynarr_create(size_t item_size, struct dynarr_allocator *allocator);
 void dynarr_destroy(struct dynarr *dynarr);
 
-#define DYNARR_LEN(dynarr) (dynarr->used)
-#define DYNARR_AVAILABLE(dynarr) (dynarr->count - dynarr->used)
+#define DYNARR_LEN(dynarr)(dynarr->used)
+#define DYNARR_AVAILABLE(dynarr)(dynarr->count - dynarr->used)
 
-void *dynarr_get(size_t index, struct dynarr *dynarr);
-void dynarr_set(void *item, size_t index, struct dynarr *dynarr);
+#define DYNARR_GET(index, dynarr)(dynarr->items + ((dynarr->padding + dynarr->size) * index))
+#define DYNARR_GET_AS(as, index, arr)(*(as *)(DYNARR_GET(index, arr)))
+#define DYNARR_SET(item, index, dynarr)(memmove(DYNARR_GET(index, dynarr), item, dynarr->size))
 int dynarr_insert(void *item, struct dynarr *dynarr);
 int dynarr_insert_at(size_t index, void *item, struct dynarr *dynarr);
 int dynarr_append(struct dynarr *from, struct dynarr *to);
 void dynarr_remove_index(size_t index, struct dynarr *dynarr);
-void dynarr_remove_all(struct dynarr *dynarr);
+int dynarr_remove_all(struct dynarr *dynarr);
 
 //> DynArrPtr
 struct dynarr_ptr *dynarr_ptr_create(struct dynarr_allocator *allocator);
