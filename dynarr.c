@@ -89,6 +89,22 @@ void dynarr_destroy(struct dynarr *dynarr){
     lzdealloc(dynarr, DYNARR_SIZE, allocator);
 }
 
+void dynarr_reverse(struct dynarr *dynarr){
+    size_t until = DYNARR_LEN(dynarr) / 2;
+
+    for (size_t left_index = 0; left_index < until; left_index++){
+        size_t right_index = dynarr->used - 1 - left_index;
+        char *left = DYNARR_POSITION(left_index, dynarr);
+        char *right = DYNARR_POSITION(right_index, dynarr);
+        char foo[DYNARR_ITEM_SIZE(dynarr)];
+
+        memcpy(foo, left, DYNARR_ITEM_SIZE(dynarr));
+        
+        DYNARR_SET(right, left_index, dynarr);
+        DYNARR_SET(foo, right_index, dynarr);
+    }
+}
+
 int dynarr_insert(void *item, struct dynarr *dynarr){
     if (dynarr->used >= dynarr->count){
         size_t new_count = DYNARR_DETERMINATE_GROW(dynarr->count);
