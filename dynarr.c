@@ -13,7 +13,7 @@ static void dynarr_move_items(size_t from, size_t to, size_t count, struct dynar
 #define DYNARR_DETERMINATE_GROW(count) (count == 0 ? DYNARR_DEFAULT_GROW_SIZE : count * 2)
 #define DYNARR_LEN(dynarr)(dynarr->used)
 #define DYNARR_FREE(dynarr)(dynarr->count - DYNARR_LEN(dynarr))
-#define DYNARR_ITEM_SIZE(dynarr)(padding_size(dynarr->size) + dynarr->size)
+#define DYNARR_ITEM_SIZE(dynarr)(dynarr_padding_size(dynarr->size) + dynarr->size)
 #define DYNARR_CALC_SIZE(count, dynarr) (DYNARR_ITEM_SIZE(dynarr) * count)
 #define DYNARR_ITEMS_SIZE(dynarr) (DYNARR_CALC_SIZE(dynarr->count, dynarr))
 #define DYNARR_POSITION(position, dynarr) (((char *)dynarr->items) + (position * DYNARR_ITEM_SIZE(dynarr)))
