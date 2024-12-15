@@ -2,9 +2,9 @@
 #include <assert.h>
 
 // private interface
-static void *_alloc_(size_t size, struct dynarr_allocator *allocator);
-static void *_realloc_(void *ptr, size_t old_size, size_t new_size, struct dynarr_allocator *allocator);
-static void _dealloc_(void *ptr, size_t size, struct dynarr_allocator *allocator);
+static void *lzalloc(size_t size, struct dynarr_allocator *allocator);
+static void *lzrealloc(void *ptr, size_t old_size, size_t new_size, struct dynarr_allocator *allocator);
+static void lzdealloc(void *ptr, size_t size, struct dynarr_allocator *allocator);
 
 static size_t dynarr_padding_size(size_t item_size);
 static int dynarr_resize(size_t new_count, struct dynarr *dynarr);
@@ -21,15 +21,15 @@ static void dynarr_move_items(size_t from, size_t to, size_t count, struct dynar
 #define DYNARR_PTR_ITEMS_SIZE(dynarr_ptr) (sizeof(void *) * dynarr_ptr->count)
 
 // private implementation
-void *_alloc_(size_t size, struct dynarr_allocator *allocator){
+void *lzalloc(size_t size, struct dynarr_allocator *allocator){
     return allocator ? allocator->alloc(size, allocator->ctx) : malloc(size);
 }
 
-void *_realloc_(void *ptr, size_t new_size, size_t old_size, struct dynarr_allocator *allocator){
+void *lzrealloc(void *ptr, size_t new_size, size_t old_size, struct dynarr_allocator *allocator){
     return allocator ? allocator->realloc(ptr, new_size, old_size, allocator->ctx) : realloc(ptr, new_size);
 }
 
-void _dealloc_(void *ptr, size_t size, struct dynarr_allocator *allocator){
+void lzdealloc(void *ptr, size_t size, struct dynarr_allocator *allocator){
     if (!ptr)
         return;
 
@@ -47,7 +47,7 @@ size_t dynarr_padding_size(size_t item_size){
 int dynarr_resize(size_t new_count, struct dynarr *dynarr){
     size_t old_size = DYNARR_CALC_SIZE(dynarr->count, dynarr);
     size_t new_size = DYNARR_CALC_SIZE(new_count, dynarr);
-    void *items = _realloc_(dynarr->items, new_size, old_size, dynarr->allocator);
+    void *items = lzrealloc(dynarr->items, new_size, old_size, dynarr->allocator);
 
     if (!items) return 1;
 
@@ -68,7 +68,7 @@ void dynarr_move_items(size_t from, size_t to, size_t count, struct dynarr *dyna
 // public implementation
 struct dynarr *dynarr_create(size_t item_size, struct dynarr_allocator *allocator){
     size_t bytes = sizeof(struct dynarr);
-    struct dynarr *vector = (struct dynarr *)_alloc_(bytes, allocator);
+    struct dynarr *vector = (struct dynarr *)lzalloc(bytes, allocator);
 
     vector->used = 0;
     vector->count = 0;
@@ -86,14 +86,14 @@ void dynarr_destroy(struct dynarr *dynarr){
     struct dynarr_allocator *allocator = dynarr->allocator;
     size_t size = DYNARR_ITEMS_SIZE(dynarr);
 
-    _dealloc_(dynarr->items, size, allocator);
+    lzdealloc(dynarr->items, size, allocator);
 
     dynarr->used = 0;
     dynarr->count = 0;
     dynarr->items = NULL;
     dynarr->allocator = NULL;
 
-    _dealloc_(dynarr, sizeof(struct dynarr), allocator);
+    lzdealloc(dynarr, sizeof(struct dynarr), allocator);
 }
 
 void *dynarr_get(size_t index, struct dynarr *dynarr){
@@ -178,7 +178,7 @@ void dynarr_remove_all(struct dynarr *dynarr){
 }
 
 struct dynarr_ptr *dynarr_ptr_create(struct dynarr_allocator *allocator){
-    struct dynarr_ptr *dynarr = (struct dynarr_ptr *)_alloc_(sizeof(struct dynarr_ptr), allocator);
+    struct dynarr_ptr *dynarr = (struct dynarr_ptr *)lzalloc(sizeof(struct dynarr_ptr), allocator);
 
     if (!dynarr)
         return NULL;
@@ -196,19 +196,19 @@ void dynarr_ptr_destroy(struct dynarr_ptr *dynarr){
         return;
 
     size_t size = DYNARR_PTR_ITEMS_SIZE(dynarr);
-    _dealloc_(dynarr->items, size, dynarr->allocator);
+    lzdealloc(dynarr->items, size, dynarr->allocator);
 
     dynarr->used = 0;
     dynarr->count = 0;
     dynarr->items = NULL;
 
-    _dealloc_(dynarr, sizeof(struct dynarr_ptr), dynarr->allocator);
+    lzdealloc(dynarr, sizeof(struct dynarr_ptr), dynarr->allocator);
 }
 
 int dynarr_ptr_resize(size_t new_count, struct dynarr_ptr *dynarr){
     size_t old_size = DYNARR_PTR_ITEMS_SIZE(dynarr);
     size_t new_size = sizeof(void *) * new_count;
-    void **items = _realloc_(dynarr->items, new_size, old_size, dynarr->allocator);
+    void **items = lzrealloc(dynarr->items, new_size, old_size, dynarr->allocator);
 
     if (!items)
         return 1;
