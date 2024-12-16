@@ -11,6 +11,11 @@ static void lzdealloc(void *ptr, size_t size, struct dynarr_allocator *allocator
 static size_t padding_size(size_t item_size);
 static int dynarr_resize(size_t new_count, struct dynarr *dynarr);
 
+#define GET_ITEM(index, size, buff)((char *)buff + ((index) * size))
+#define SET_ITEM(index, size, item, buff)(memmove(GET_ITEM(index, size, buff), item, size))
+
+static int quick_sort(void *buff, size_t size, size_t len, int (*comparator)(void *a, void *b), struct dynarr_allocator *allocator);
+
 #define DYNARR_DETERMINATE_GROW(count) (count == 0 ? DYNARR_DEFAULT_GROW_SIZE : count * 2)
 #define DYNARR_LEN(dynarr)(dynarr->used)
 #define DYNARR_FREE(dynarr)(dynarr->count - DYNARR_LEN(dynarr))
@@ -62,6 +67,64 @@ int dynarr_resize(size_t new_count, struct dynarr *dynarr){
     return 0;
 }
 
+int quick_sort(void *buff, size_t size, size_t len, int (*comparator)(void *a, void *b), struct dynarr_allocator *allocator){
+    if(len < 2) return 0;
+    
+    if(len == 2){
+        void *a = GET_ITEM(0, size, buff);
+        void *b = GET_ITEM(1, size, buff);
+        char c[size];
+
+        memcpy(c, b, size);
+
+        int comparation = comparator(a, b);
+
+        if(comparation > 0){
+            SET_ITEM(1, size, a, buff);
+            SET_ITEM(0, size, c, buff);
+        }
+        
+        return 0;
+    }
+    
+    char *temp_buff = (char *)lzalloc(size * len, allocator);
+    if(!temp_buff) return 1;
+    
+    char pivot[size];
+    size_t pivot_index = 0;
+    memcpy(pivot, GET_ITEM(pivot_index, size, buff), size); 
+
+    size_t less = 0;
+    size_t greater = 0;
+
+    for (size_t i = 0; i < len; i++){
+        if(i == pivot_index) continue;
+
+        void *item = GET_ITEM(i, size, buff);
+        int comparation = comparator(item, pivot);
+
+        if(comparation < 0){
+            size_t lindex = less++;
+            SET_ITEM(lindex, size, item, temp_buff);
+        }
+
+        if(comparation >= 0){
+            size_t rindex = len - 1 - greater++;
+            SET_ITEM(rindex, size, item, temp_buff);
+        }
+    }
+
+    quick_sort(GET_ITEM(0, size, temp_buff), size, less, comparator, allocator);
+    quick_sort(GET_ITEM(len - greater, size, temp_buff), size, greater, comparator, allocator);
+    
+    SET_ITEM(less, size, pivot, temp_buff);
+    memcpy(buff, temp_buff, size * len);
+
+    lzdealloc(temp_buff, size * len, allocator);
+
+    return 0;
+}
+
 // public implementation
 struct dynarr *dynarr_create(size_t item_size, struct dynarr_allocator *allocator){
     struct dynarr *dynarr = (struct dynarr *)lzalloc(DYNARR_SIZE, allocator);
@@ -103,6 +166,10 @@ void dynarr_reverse(struct dynarr *dynarr){
         DYNARR_SET(right, left_index, dynarr);
         DYNARR_SET(foo, right_index, dynarr);
     }
+}
+
+void dynarr_sort(int (*comparator)(void *a, void *b), struct dynarr *dynarr){
+    quick_sort(dynarr->items, DYNARR_ITEM_SIZE(dynarr), dynarr->used, comparator, dynarr->allocator);
 }
 
 int dynarr_insert(void *item, struct dynarr *dynarr){
