@@ -1,32 +1,41 @@
 #include "dynarr.h"
-#include <assert.h>
+
+struct dynarr{
+    size_t capacity;
+    size_t used;
+    size_t rsize;
+    size_t fsize;
+    char *items;
+    const DynArrAllocator *allocator;
+};
 
 // PRIVATE INTERFACE
-static void *lzalloc(size_t size, DynArrAllocator *allocator);
-static void *lzrealloc(void *ptr, size_t old_size, size_t new_size, DynArrAllocator *allocator);
-static void lzdealloc(void *ptr, size_t size, DynArrAllocator *allocator);
+static void *lzalloc(size_t size, const DynArrAllocator *allocator);
+static void *lzrealloc(void *ptr, size_t old_size, size_t new_size, const DynArrAllocator *allocator);
+static void lzdealloc(void *ptr, size_t size, const DynArrAllocator *allocator);
 
-#define MEMORY_ALLOC(_type, _count, _allocator)((_type *)lzalloc(sizeof(_type) * (_count), (_allocator)))
-#define MEMORY_REALLOC(_ptr, _type, _old_count, _new_count, _allocator)((_type *)(lzrealloc((_ptr), sizeof(_type) * (_old_count), sizeof(_type) * (_new_count), (_allocator))))
-#define MEMORY_DEALLOC(_ptr, _type, _count, _allocator)(lzdealloc((_ptr), sizeof(_type) * (_count), (_allocator)))
+#define MEMORY_ALLOC(_type, _count, _allocator)                         ((_type *)lzalloc(sizeof(_type) * (_count), (_allocator)))
+#define MEMORY_REALLOC(_ptr, _type, _old_count, _new_count, _allocator) ((_type *)(lzrealloc((_ptr), sizeof(_type) * (_old_count), sizeof(_type) * (_new_count), (_allocator))))
+#define MEMORY_DEALLOC(_ptr, _type, _count, _allocator)                 (lzdealloc((_ptr), sizeof(_type) * (_count), (_allocator)))
 
 static inline size_t padding_size(size_t item_size);
 static int grow(DynArr *dynarr);
-static int grow_by(size_t by, DynArr *dynarr);
+static int grow_by(DynArr *dynarr, size_t by);
 static int shrink(DynArr *dynarr);
-static inline void *get_slot(size_t idx, DynArr *dynarr);
-static inline void move_items(size_t from, size_t to, DynArr *dynarr);
+static inline void *get_slot(const DynArr *dynarr, size_t idx);
+#define CALC_ITMS_MOV_COUNT(_len, _from) ((_len) - (_from))
+static inline void move_items(DynArr *dynarr, size_t from, size_t to);
 
 // PRIVATE IMPLEMENTATION
-void *lzalloc(size_t size, DynArrAllocator *allocator){
+void *lzalloc(size_t size, const DynArrAllocator *allocator){
     return allocator ? allocator->alloc(size, allocator->ctx) : malloc(size);
 }
 
-void *lzrealloc(void *ptr, size_t old_size, size_t new_size, DynArrAllocator *allocator){
+void *lzrealloc(void *ptr, size_t old_size, size_t new_size, const DynArrAllocator *allocator){
     return allocator ? allocator->realloc(ptr, old_size, new_size, allocator->ctx) : realloc(ptr, new_size);
 }
 
-void lzdealloc(void *ptr, size_t size, DynArrAllocator *allocator){
+void lzdealloc(void *ptr, size_t size, const DynArrAllocator *allocator){
     if (allocator){
         allocator->dealloc(ptr, size, allocator->ctx);
     }else{
@@ -41,7 +50,7 @@ static inline size_t padding_size(size_t item_size){
 
 static int grow(DynArr *dynarr){
     size_t item_size = dynarr->fsize;
-    size_t old_count = dynarr->count;
+    size_t old_count = dynarr->capacity;
     size_t new_count = old_count == 0 ? DYNARR_DEFAULT_GROW_SIZE : old_count * 2;
     size_t old_size = old_count * item_size;
     size_t new_size = new_count * item_size;
@@ -52,15 +61,15 @@ static int grow(DynArr *dynarr){
         return 1;
     }
 
-    dynarr->count = new_count;
+    dynarr->capacity = new_count;
     dynarr->items = new_items;
 
     return 0;
 }
 
-static int grow_by(size_t by, DynArr *dynarr){
+static int grow_by(DynArr *dynarr, size_t by){
     size_t item_size = dynarr->fsize;
-    size_t old_count = dynarr->count;
+    size_t old_count = dynarr->capacity;
     size_t new_count = old_count + by;
     size_t old_size = old_count * item_size;
     size_t new_size = new_count * item_size;
@@ -71,7 +80,7 @@ static int grow_by(size_t by, DynArr *dynarr){
         return 1;
     }
 
-    dynarr->count = new_count;
+    dynarr->capacity = new_count;
     dynarr->items = new_items;
 
     return 0;
@@ -79,7 +88,7 @@ static int grow_by(size_t by, DynArr *dynarr){
 
 static int shrink(DynArr *dynarr){
     size_t item_size = dynarr->fsize;
-    size_t old_count = dynarr->count;
+    size_t old_count = dynarr->capacity;
     size_t new_count = old_count / 2;
     size_t old_size = old_count * item_size;
     size_t new_size = new_count * item_size;
@@ -90,26 +99,32 @@ static int shrink(DynArr *dynarr){
         return 1;
     }
 
-    dynarr->count = new_count;
+    dynarr->capacity = new_count;
     dynarr->items = new_items;
 
     return 0;
 }
 
-static inline void *get_slot(size_t idx, DynArr *dynarr){
+static inline void *get_slot(const DynArr *dynarr, size_t idx){
     return ((char *)(dynarr->items)) + (idx * dynarr->fsize);
 }
 
-static inline void move_items(size_t from, size_t to, DynArr *dynarr){
+static inline void move_items(DynArr *dynarr, size_t from, size_t to){
+    size_t itms_mov_count = CALC_ITMS_MOV_COUNT(dynarr_len(dynarr), from);
+
+    if(from == to || itms_mov_count == 0){
+        return;
+    }
+
     memmove(
-        get_slot(to, dynarr),
-        get_slot(from, dynarr),
-        (dynarr->used - from + 1) * dynarr->fsize
+        get_slot(dynarr, to),
+        get_slot(dynarr, from),
+        itms_mov_count * dynarr->fsize
     );
 }
 
 // public implementation
-DynArr *dynarr_create(size_t item_size, DynArrAllocator *allocator){
+DynArr *dynarr_create(size_t item_size, const DynArrAllocator *allocator){
     DynArr *dynarr = MEMORY_ALLOC(DynArr, 1, allocator);
 
     if(!dynarr){
@@ -117,7 +132,7 @@ DynArr *dynarr_create(size_t item_size, DynArrAllocator *allocator){
     }
 
     dynarr->used = 0;
-    dynarr->count = 0;
+    dynarr->capacity = 0;
     dynarr->rsize = item_size;
     dynarr->fsize = padding_size(item_size) + item_size;
     dynarr->items = NULL;
@@ -126,7 +141,7 @@ DynArr *dynarr_create(size_t item_size, DynArrAllocator *allocator){
     return dynarr;
 }
 
-DynArr *dynarr_create_by(size_t item_size, size_t item_count, DynArrAllocator *allocator){
+DynArr *dynarr_create_by(size_t item_size, size_t item_count, const DynArrAllocator *allocator){
     size_t fsize = padding_size(item_size) + item_size;
     void *items = MEMORY_ALLOC(char, fsize * item_count, allocator);
     DynArr *dynarr = MEMORY_ALLOC(DynArr, 1, allocator);
@@ -138,7 +153,7 @@ DynArr *dynarr_create_by(size_t item_size, size_t item_count, DynArrAllocator *a
     }
 
     dynarr->used = 0;
-    dynarr->count = item_count;
+    dynarr->capacity = item_count;
     dynarr->rsize = item_size;
     dynarr->fsize = fsize;
     dynarr->items = items;
@@ -152,18 +167,26 @@ void dynarr_destroy(DynArr *dynarr){
         return;
     }
 
-    DynArrAllocator *allocator = dynarr->allocator;
+    const DynArrAllocator *allocator = dynarr->allocator;
 
-    MEMORY_DEALLOC(dynarr->items, char, dynarr->fsize * dynarr->count, allocator);
+    MEMORY_DEALLOC(dynarr->items, char, dynarr->fsize * dynarr->capacity, allocator);
     MEMORY_DEALLOC(dynarr, DynArr, 1, allocator);
 }
 
-inline size_t dynarr_available(DynArr *dynarr){
-    return dynarr->count - dynarr->used;
+inline size_t dynarr_capacity(const DynArr *dynarr){
+    return dynarr->capacity;
+}
+
+inline size_t dynarr_len(const DynArr *dynarr){
+    return dynarr->used;
+}
+
+inline size_t dynarr_available(const DynArr *dynarr){
+    return dynarr->capacity - dynarr->used;
 }
 
 inline int dynarr_reduce(DynArr *dynarr){
-    if(DYNARR_LEN(dynarr) < dynarr->count / 2){
+    if(dynarr_len(dynarr) < dynarr->capacity / 2){
         return !shrink(dynarr);
     }
 
@@ -172,38 +195,39 @@ inline int dynarr_reduce(DynArr *dynarr){
 
 void dynarr_reverse(DynArr *dynarr){
     size_t fsize = dynarr->fsize;
-    size_t len = DYNARR_LEN(dynarr);
-    size_t until = DYNARR_LEN(dynarr) / 2;
+    size_t len = dynarr_len(dynarr);
+    size_t until = dynarr_len(dynarr) / 2;
 
     for (size_t left_index = 0; left_index < until; left_index++){
         size_t right_index = len - 1 - left_index;
-        char *left = get_slot(left_index, dynarr);
-        char *right = get_slot(right_index, dynarr);
+        char *left = get_slot(dynarr, left_index);
+        char *right = get_slot(dynarr, right_index);
         char temp_item[fsize];
 
         memcpy(temp_item, left, fsize);
-        dynarr_set_at(left_index, right, dynarr);
-        dynarr_set_at(right_index, temp_item, dynarr);
+        dynarr_set_at(dynarr, left_index, right);
+        dynarr_set_at(dynarr, right_index, temp_item);
     }
 }
 
-inline void dynarr_sort(int (*comparator)(const void *a, const void *b), DynArr *dynarr){
+inline void dynarr_sort(DynArr *dynarr, DynArrComparator comparator){
     qsort(dynarr->items, dynarr->used, dynarr->fsize, comparator);
 }
 
-int dynarr_find(void *item, int (*comparator)(const void *a, const void *b), DynArr *dynarr){
-    int left = 0;
-    int right = DYNARR_LEN(dynarr) == 0 ? 0 : DYNARR_LEN(dynarr) - 1;
+int dynarr_find(const DynArr *dynarr, const void *item, DynArrComparator comparator){
+    size_t len = dynarr_len(dynarr);
+    int low = 0;
+    int high = len == 0 ? 0 : len - 1;
 
-    while (left <= right){
-        int middle_index = (left + right) / 2;
-        void *middle = get_slot((size_t)middle_index, dynarr);
-        int comparition = comparator(middle, item);
+    while (low <= high){
+        int middle_index = low + (high - low) / 2;
+        void *middle = get_slot(dynarr, (size_t)middle_index);
+        int comparison = comparator(middle, item);
 
-        if(comparition < 0){
-            left = middle_index + 1;
-        }else if(comparition > 0){
-            right = middle_index - 1;
+        if(comparison < 0){
+            low = middle_index + 1;
+        }else if(comparison > 0){
+            high = middle_index - 1;
         }else{
             return middle_index;
         }
@@ -212,169 +236,193 @@ int dynarr_find(void *item, int (*comparator)(const void *a, const void *b), Dyn
     return -1;
 }
 
-inline void *dynarr_get_raw(size_t idx, DynArr *dynarr){
-    if(idx >= dynarr->used){
+inline void *dynarr_get_raw(const DynArr *dynarr, size_t idx){
+    if(idx >= dynarr_len(dynarr)){
         return NULL;
     }
 
-    return get_slot(idx, dynarr);
+    return get_slot(dynarr, idx);
 }
 
-inline void *dynarr_get_ptr(size_t idx, DynArr *dynarr){
-    size_t rsize = dynarr->rsize;
-
-    assert(rsize == sizeof(uintptr_t) && "Item size must be equals to pointer size");
-
-    if(idx >= dynarr->used){
+inline void *dynarr_get_ptr(const DynArr *dynarr, size_t idx){
+    if(idx >= dynarr_len(dynarr)){
         return NULL;
     }
 
-    return (void *)(*(uintptr_t *)get_slot(idx, dynarr));
+    return (void *)(*(uintptr_t *)get_slot(dynarr, idx));
 }
 
-inline int dynarr_set_at(size_t idx, void *item, DynArr *dynarr){
-    if(idx >= dynarr->used){
-        return 1;
+inline int dynarr_set_at(DynArr *dynarr, size_t idx, const void *item){
+    if(idx >= dynarr_len(dynarr)){
+        return IDX_OUT_OF_BOUNDS_ERR_DYNARR_CODE;
     }
 
-    memmove(get_slot(idx, dynarr), item, dynarr->rsize);
+    memmove(get_slot(dynarr, idx), item, dynarr->rsize);
 
-    return 0;
+    return OK_DYNARR_CODE;
 }
 
-inline void dynarr_set_ptr(size_t idx, void *ptr, DynArr *dynarr){
+inline int dynarr_set_ptr(DynArr *dynarr, size_t idx, const void *ptr){
+    if(idx >= dynarr_len(dynarr)){
+        return IDX_OUT_OF_BOUNDS_ERR_DYNARR_CODE;
+    }
+
     size_t rsize = dynarr->rsize;
-
-    assert(rsize == sizeof(uintptr_t) && "Item size must be equals to pointer size");
-
     uintptr_t iptr = (uintptr_t)ptr;
 
-    memmove(get_slot(idx, dynarr), &iptr, rsize);
+    memmove(get_slot(dynarr, idx), &iptr, rsize);
+
+    return OK_DYNARR_CODE;
 }
 
-inline int dynarr_insert(void *item, DynArr *dynarr){
-    if (dynarr->used >= dynarr->count && grow(dynarr)){
-        return 1;
+inline int dynarr_insert(DynArr *dynarr, const void *item){
+    if (dynarr->used >= dynarr->capacity && grow(dynarr)){
+        return ALLOC_ERR_DYNARR_CODE;
     }
 
-    memmove(get_slot(dynarr->used++, dynarr), item, dynarr->rsize);
+    memmove(get_slot(dynarr, dynarr->used++), item, dynarr->rsize);
 
-    return 0;
+    return OK_DYNARR_CODE;
 }
 
-int dynarr_insert_at(size_t idx, void *item, DynArr *dynarr){
-    if(DYNARR_LEN(dynarr) == 0){
-        if(idx > 0){
-            return 1;
-        }
+int dynarr_insert_at(DynArr *dynarr, size_t idx, const void *item){
+    size_t len = dynarr_len(dynarr);
 
-        return dynarr_insert(item, dynarr);
+    if(idx > len){
+        return IDX_OUT_OF_BOUNDS_ERR_DYNARR_CODE;
     }
 
-    if (dynarr->used >= dynarr->count && grow(dynarr)){
-        return 1;
+    size_t itms_mov_count = CALC_ITMS_MOV_COUNT(len, idx);
+    size_t available_count = dynarr_available(dynarr);
+
+    if(itms_mov_count >= available_count && grow(dynarr)){
+        return ALLOC_ERR_DYNARR_CODE;
     }
 
-    move_items(idx, idx + 1, dynarr);
-    dynarr_set_at(idx, item, dynarr);
+    move_items(dynarr, idx, idx + 1);
+    dynarr_set_at(dynarr, idx, item);
 
     dynarr->used++;
 
-    return 0;
+    return OK_DYNARR_CODE;
 }
 
-inline int dynarr_insert_ptr(void *ptr, DynArr *dynarr){
-    size_t rsize = dynarr->rsize;
-
-    assert(rsize == sizeof(uintptr_t) && "Item size must be equals to pointer size");
-
+inline int dynarr_insert_ptr(DynArr *dynarr, const void *ptr){
     uintptr_t iptr = (uintptr_t)ptr;
 
-    return dynarr_insert(&iptr, dynarr);
+    return dynarr_insert(dynarr, &iptr);
 }
 
-inline int dynarr_insert_ptr_at(size_t index, void *ptr, DynArr *dynarr){
-    size_t rsize = dynarr->rsize;
-
-    assert(rsize == sizeof(uintptr_t) && "Item size must be equals to pointer size");
-
-    uintptr_t iptr = (uintptr_t)ptr;
-
-    return dynarr_insert_at(index, &iptr, dynarr);
-}
-
-int dynarr_append(DynArr *from, DynArr *to){
-    assert(to->rsize == from->rsize && "Expect both list to have the same item size");
-
-    size_t from_len = DYNARR_LEN(from);
-
-    if(from_len == 0){
-        return 1;
+inline int dynarr_insert_ptr_at(DynArr *dynarr, size_t idx, const void *ptr){
+    if(idx >= dynarr_len(dynarr)){
+        return IDX_OUT_OF_BOUNDS_ERR_DYNARR_CODE;
     }
 
-    size_t to_len = DYNARR_LEN(to);
+    uintptr_t iptr = (uintptr_t)ptr;
+
+    return dynarr_insert_at(dynarr, idx, &iptr);
+}
+
+int dynarr_append(const DynArr *from, DynArr *to){
+    size_t from_len = dynarr_len(from);
+
+    if(from_len == 0){
+        return DYNARR_EMPTY_ERR_DYNARR_CODE;
+    }
+
+    size_t to_len = dynarr_len(to);
     size_t to_available = dynarr_available(to);
-    size_t to_start_idx = to_len == 0 ? 0 : to_len - 1;
+    size_t to_start_idx = to_len;
 
     if(from_len <= to_available){
         memmove(
-            get_slot(to_start_idx, to),
-            get_slot(0, from),
+            get_slot(to, to_start_idx),
+            get_slot(from, 0),
             from->fsize * from_len
         );
 
         to->used += from_len;
 
-        return 0;
+        return OK_DYNARR_CODE;
     }
 
     size_t required = from_len - to_available;
 
-    if(grow_by(required, to)){
-        return 1;
+    if(grow_by(to, required)){
+        return ALLOC_ERR_DYNARR_CODE;
     }
 
     memmove(
-        get_slot(to_start_idx, to),
-        get_slot(0, from),
+        get_slot(to, to_start_idx),
+        get_slot(from, 0),
         from->fsize * from_len
     );
 
     to->used += from_len;
 
-    return 0;
+    return OK_DYNARR_CODE;
 }
 
-DynArr *dynarr_append_new(DynArr *a_dynarr, DynArr *b_dynarr, DynArrAllocator *allocator){
+int dynarr_append_new(const DynArr *a_dynarr, const DynArr *b_dynarr, const DynArrAllocator *allocator, DynArr **out_new_dynarr){
     size_t a_rsize = a_dynarr->rsize;
     size_t b_rsize = b_dynarr->rsize;
 
-    assert(a_rsize == b_rsize && "Both DynArr's item size must be the same");
+    if(a_rsize != b_rsize){
+        return SIZE_MISMATCH_ERR_DYNARR_CODE;
+    }
 
     size_t fsize = a_dynarr->fsize;
-    size_t a_len = DYNARR_LEN(a_dynarr);
-    size_t b_len = DYNARR_LEN(b_dynarr);
+    size_t a_len = dynarr_len(a_dynarr);
+    size_t b_len = dynarr_len(b_dynarr);
     size_t c_len = a_len + b_len;
     DynArr *c_dynarr = dynarr_create_by(a_rsize, c_len, allocator);
 
     if(!c_dynarr){
-        return NULL;
+        return ALLOC_ERR_DYNARR_CODE;
     }
 
     memcpy(c_dynarr->items, a_dynarr->items, fsize * a_len);
-    memcpy(get_slot(a_len, c_dynarr), b_dynarr->items, fsize * b_len);
+    memcpy(get_slot(c_dynarr, a_len), b_dynarr->items, fsize * b_len);
 
     c_dynarr->used = c_len;
+    *out_new_dynarr = c_dynarr;
 
-    return c_dynarr;
+    return OK_DYNARR_CODE;
 }
 
-inline void dynarr_remove_index(size_t idx, DynArr *dynarr){
-    if(idx < DYNARR_LEN(dynarr) - 1){
-        move_items(idx + 1, idx, dynarr);
+inline int dynarr_remove_index(DynArr *dynarr, size_t idx){
+    size_t len = dynarr_len(dynarr);
+
+    if(idx >= len){
+        return IDX_OUT_OF_BOUNDS_ERR_DYNARR_CODE;
+    }
+
+    if(idx < len - 1){
+        move_items(dynarr, idx + 1, idx);
     }
 
     dynarr->used--;
+
+    return OK_DYNARR_CODE;
+}
+
+int dynarr_remove_if(DynArr *dynarr, DynArrPredicate predicate, void *ctx){
+    size_t i = 0;
+    size_t remove_count  = 0;
+
+    while (i < dynarr_len(dynarr)){
+        void *item = dynarr_get_raw(dynarr, i);
+
+        if(predicate(item, ctx)){
+            dynarr_remove_index(dynarr, i);
+
+            remove_count++;
+        }else{
+            i++;
+        }
+    }
+
+    return remove_count;
 }
 
 inline void dynarr_remove_all(DynArr *dynarr){
