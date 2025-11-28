@@ -151,10 +151,6 @@ static inline void move_items(DynArr *dynarr, size_t from, size_t to){
 }
 
 // public implementation
-inline size_t dynarr_size(){
-    return sizeof(DynArr);
-}
-
 DynArr *dynarr_init(void *raw_dynarr, size_t item_size, const DynArrAllocator *allocator){
     DynArr *dynarr = raw_dynarr;
 
@@ -249,6 +245,10 @@ inline size_t dynarr_len(const DynArr *dynarr){
 
 inline size_t dynarr_capacity(const DynArr *dynarr){
     return dynarr->capacity;
+}
+
+inline size_t dynarr_item_size(const DynArr *dynarr){
+    return dynarr->item_size;
 }
 
 inline size_t dynarr_available(const DynArr *dynarr){
@@ -440,9 +440,9 @@ int dynarr_append(DynArr *to, const DynArr *from){
 }
 
 int dynarr_join(
+    const DynArrAllocator *allocator,
     const DynArr *a_dynarr,
     const DynArr *b_dynarr,
-    const DynArrAllocator *allocator,
     DynArr **out_new_dynarr
 ){
     size_t a_item_size = a_dynarr->item_size;

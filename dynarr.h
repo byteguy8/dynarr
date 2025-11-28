@@ -32,7 +32,6 @@ typedef int (*DynArrPredicate)(const void *item, void *ctx);
 typedef struct dynarr DynArr;
 
 // PUBLIC INTERFACE DYNARR
-size_t dynarr_size();
 DynArr *dynarr_init(void *dynarr, size_t item_size, const DynArrAllocator *allocator);
 DynArr *dynarr_create(const DynArrAllocator *allocator, size_t item_size);
 DynArr *dynarr_create_by(
@@ -61,6 +60,7 @@ void dynarr_destroy(DynArr *dynarr);
 
 size_t dynarr_len(const DynArr *dynarr);
 size_t dynarr_capacity(const DynArr *dynarr);
+size_t dynarr_item_size(const DynArr *dynarr);
 size_t dynarr_available(const DynArr *dynarr);
 int dynarr_make_room(DynArr *dynarr, size_t count);
 int dynarr_reduce(DynArr *dynarr);
@@ -100,9 +100,9 @@ int dynarr_insert_ptr_at(DynArr *dynarr, size_t idx, const void *ptr);
 
 int dynarr_append(DynArr *to, const DynArr *from);
 int dynarr_join(
+    const DynArrAllocator *allocator,
     const DynArr *a_dynarr,
     const DynArr *b_dynarr,
-    const DynArrAllocator *allocator,
     DynArr **out_new_dynarr
 );
 
